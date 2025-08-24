@@ -404,6 +404,176 @@ barra.style.width = '100%';
   }
 
   function mostrarRelatorio() {
+  trocarTela('reportScreen');
+  const erros = perguntas.length - acertos;
+
+  document.getElementById('resumo').textContent =
+    `${nome} (${ano}) - Acertos: ${acertos}/${perguntas.length}`;
+
+  // Centralizar o gráfico
+  const graficoContainer = document.createElement('div');
+  graficoContainer.style.display = 'flex';
+  graficoContainer.style.justifyContent = 'center';
+  graficoContainer.style.marginTop = '20px';
+
+  const ctx = document.getElementById('grafico').getContext('2d');
+  new Chart(ctx, {
+    type: 'pie',
+    data: {
+      labels: ['Acertos', 'Erros'],
+      datasets: [{
+        data: [acertos, erros],
+        backgroundColor: ['#3498db', '#e74c3c']
+      }]
+    }
+  });
+
+  graficoContainer.appendChild(document.getElementById('grafico'));
+  document.getElementById('reportScreen').appendChild(graficoContainer);
+
+  // Calcular categorias
+  let categorias = {};
+  resultados.forEach(r => {
+    if (!categorias[r.categoria]) {
+      categorias[r.categoria] = { total: 0, acertos: 0, erros: 0 };
+    }
+    categorias[r.categoria].total++;
+    if (r.acertou) {
+      categorias[r.categoria].acertos++;
+    } else {
+      categorias[r.categoria].erros++;
+    }
+  });
+
+  // Função para criar painel de categorias
+  function criarPainel(titulo, cor, dados, tipo) {
+    let painel = `<div style="padding:10px;border-radius:20px;width:200px;margin:10px;">
+                    <h3 style="margin:0;background-color:${cor};border-radius:15px;padding:5px;text-align:center;color:white;">${titulo}</h3>`;
+    for (let cat in dados) {
+      let porcento = ((tipo === 'acertos' ? dados[cat].acertos : dados[cat].erros) / dados[cat].total * 100).toFixed(1);
+      painel += `<p>${cat}: ${porcento}%</p>`;
+    }
+    painel += `</div>`;
+    return painel;
+  }
+
+  const painelAcertos = criarPainel('Acertos', '#1E90FF', categorias, 'acertos');
+  const painelErros = criarPainel('Erros', '#e74c3c', categorias, 'erros');
+
+  // Pior categoria
+  let piorCategoria = null;
+  let maiorErro = 0;
+  for (let cat in categorias) {
+    let porcentoErro = (categorias[cat].erros / categorias[cat].total) * 100;
+    if (porcentoErro > maiorErro) {
+      maiorErro = porcentoErro;
+      piorCategoria = cat;
+    }
+  }
+
+  const painelMelhoria = `<div style="padding:10px;border-radius:20px;width:300px;margin:10px;">
+                            <h3 style="margin:0;background-color:#2ecc71;border-radius:15px;padding:5px;text-align:center;color:white;">Pontos de melhoria:</h3>
+                            <p>O aluno <b>${nome}</b> apresentou mais dificuldades em <b>${piorCategoria}</b>, 
+                            por consequência é indicado prestar apoio e mais atenção em atividades relacionadas a <b>${piorCategoria}</b>.</p>
+                          </div>`;
+
+  // Container dos painéis
+  let container = document.createElement('div');
+  container.style.display = 'flex';
+  container.style.justifyContent = 'center';
+  container.style.alignItems = 'flex-start';
+  container.style.gap = '20px';
+  container.style.marginTop = '20px';
+  container.innerHTML = painelAcertos + painelErros + painelMelhoria;
+
+  document.getElementById('reportScreen').appendChild(container);
+
+  // Botão de próxima ação
+  const botao = document.querySelector('#reportScreen button');
+  botao.style.display = acertos >= 6 ? 'inline-block' : 'none';
+}
+
+
+  function mostrarRecompensa() {
+    socket.emit('recompensa');
+    trocarTela('rewardScreen');
+    document.getElementById('userName').textContent = nome;
+  }
+
+  const socket = io('http://localhost:5001');
+  console.log("O script está rodando!");
+
+  socket.on('botao', data => {
+    console.log('Evento de botão recebido! Dados:', data);
+    const botao = data.botao.replace('BTN','') - 1;
+    responder(botao);
+  });
+
+  function reset() {
+    socket.emit("reset");
+  }
+</script>
+</body>
+</html>orAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  function responder(i) {
+    clearInterval(timerInterval);
+    verificarResposta(i);
+  }
+
+  function verificarResposta(i) {
+    const correta = perguntas[indice].correct;
+    const botoes = document.querySelectorAll('.options button');
+
+    botoes.forEach(b => {
+      b.classList.remove('correta', 'errada', 'desativado');
+    });
+
+    resultados.push({ categoria: perguntas[indice].category, acertou: i === correta });
+
+    if (i === correta) {
+      acertos++;
+      socket.emit('acertou'); 
+      botoes.forEach((b, index) => {
+        if (index === correta) {
+          b.classList.add('correta');
+        } else {
+          b.classList.add('desativado');
+        }
+      });
+    } else {
+      botoes.forEach((b, index) => {
+        if (index === i) {
+          b.classList.add('errada');
+        } else if (index === correta) {
+          b.classList.add('correta');
+        } else {
+          b.classList.add('desativado');
+        }
+      });
+    }
+    setTimeout(() => {
+      if (i === correta) {
+        document.getElementById('feedbackMsg').textContent = "Acertou!";
+      } else {
+        document.getElementById('feedbackMsg').textContent = "Essa foi uma boa tentativa! Vamos tentar de novo?";
+      }
+      trocarTela('feedbackScreen');
+    }, 1000);
+  }
+
+  function proximaPergunta() {
+    indice++;
+    if (indice < perguntas.length) {
+      mostrarPergunta();
+    } else {
+      mostrarRelatorio();
+    }
+  }
+
+  function mostrarRelatorio() {
     trocarTela('reportScreen');
     const erros = perguntas.length - acertos;
 
